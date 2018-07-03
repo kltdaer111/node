@@ -1,0 +1,17 @@
+{
+  "name": "sg_service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "statistics_gen.js",
+  "dependencies": {
+    "moment": "^2.22.2",
+    "mysql": "^2.15.0",
+    "node-schedule": "^1.3.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "major",
+  "license": "ISC"
+}
