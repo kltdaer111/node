@@ -315,10 +315,182 @@ function getSecondDayRemainingByRoleid(role_array, second_day_start_timestamp, p
 	});
 }
 
-function start_work(processor, type){
-	gen_filter_data(processor, type, get_mysql_data_for_processor);
+function Worker(){}
+
+Worker.prototype.start_work = function(type){
+	this.gen_filter_data(type, this.get_mysql_data_for_processor);
 }
 
+Worker.prototype.getSecondDayRemainingByAccountid = function(account_array, second_day_start_timestamp, para1, callback){
+	if(Count(account_array) === 0){
+		callback(null, para1, para2, []);
+		return;
+	}
+	var sql = "SELECT account_uid FROM account_log WHERE UNIX_TIMESTAMP(create_date)=? AND account_uid IN (&) GROUP BY account_uid;";
+	sql = fillSqlIn(sql, '&', account_array);
+	// console.log(sql);
+	con_glog.query(sql, [second_day_start_timestamp], function(error, results, fields){
+		//console.log(results);
+		callback(error, para1, para2, results);
+	});
+}
+
+Worker.prototype.show_data = [];
+Worker.prototype.result_data = [];
+Worker.prototype.col_table = task_table;
+
+Worker.prototype.do_with_SecondDayRemaining_result = function(err, idx, result){
+	if(err){
+		console.log(err);
+		return;
+	}
+	src_result[idx].push(result);
+	//console.log(result);
+	//console.log(sum_for_check);
+	sum_for_check -= 1;
+	var res = [];
+	if(sum_for_check === 0){
+		this.do_with_results();
+	}
+}
+
+Worker.prototype.do_with_results = function(){
+	for(idx in this.col_table){
+		this.show_data.push(get_col_data(this.result_data, need_cols[idx]));
+	}
+}
+
+Worker.prototype.sum_for_check = 0;
+
+Worker.prototype.fill_result_if_ready = function(){
+	if(this.processor.checkMysqlDataReady()){
+		var res = this.processor.getChainWorkResult();
+		//console.log(results);
+		for(idx in res){
+			this.sum_for_check += 1;
+			switch(res[idx][0]){
+				case 'account_uid':
+				{
+					this.getSecondDayRemainingByAccountid(res[idx][1], timestamp_yesterday_begin, idx, res, this.do_with_SecondDayRemaining_result);
+				}
+				break;
+				case 'role_uid':
+				{
+					this.getSecondDayRemainingByRoleid(res[idx][1], timestamp_yesterday_begin, idx, res, this.do_with_SecondDayRemaining_result);
+				}
+				break;
+			}
+		}
+	}
+}
+
+Worker.prototype.get_mysql_data_for_processor = function(){
+	//取出指定日期的数据
+	this.processor.regNeedMysqlDataName('account');
+	this.processor.regNeedMysqlDataName('login');
+	this.processor.regNeedMysqlDataName(type);
+
+	con_glog.query('SELECT * FROM account_log WHERE UNIX_TIMESTAMP(create_date)=? AND (source_type=1562 OR source_type=1560);', [timestamp_tdby_begin],function(error, results, fields){
+		//console.log(results[0]);
+		if(error){
+			throw error;
+		}
+		this.processor.insertMysqlRawResults('account', results);
+		fill_result_if_ready(this.processor);
+	});
+	con_log.query('SELECT * FROM login_log WHERE UNIX_TIMESTAMP(create_time)>=? AND UNIX_TIMESTAMP(create_time)<?;', [timestamp_yesterday_begin, timestamp_today_begin], function(error, results, fields){
+		if(error){
+			throw error;
+		}
+		this.processor.insertMysqlRawResults('login', results);
+		fill_result_if_ready(this.processor);
+	});
+	switch(type){
+		case 'task':{
+			con_log.query('SELECT * FROM task_log WHERE task_type=1 AND op_type=702 AND UNIX_TIMESTAMP(create_time)>=? AND UNIX_TIMESTAMP(create_time)<?;', [timestamp_tdby_begin, timestamp_yesterday_begin], function(error, results, fields){
+				//console.log(results[1]);
+				if(error){
+					throw error;
+				}
+				this.processor.insertMysqlRawResults('task', results);
+				fill_result_if_ready(this.processor);
+			});
+		}
+		break;
+		case 'level':{
+			con_log.query('SELECT * FROM role_exp_level_log WHERE old_level!=new_level AND source_param != 0 AND UNIX_TIMESTAMP(create_time)>=? AND UNIX_TIMESTAMP(create_time)<?;', [timestamp_tdby_begin, timestamp_yesterday_begin], function(error, results, fields){
+				//console.log(results[1]);
+				if(error){
+					throw error;
+				}
+				this.processor.insertMysqlRawResults('level', results);
+				fill_result_if_ready(this.processor);
+			});
+		}
+		break;
+		case 'duration':{
+			con_log.query('SELECT role_uid,sum(online_time) as duration FROM login_log WHERE UNIX_TIMESTAMP(create_time)>=? AND UNIX_TIMESTAMP(create_time)<? GROUP BY role_uid;', [timestamp_tdby_begin, timestamp_yesterday_begin], function(error, results, fields){
+				//console.log(results[1]);
+				if(error){
+					throw error;
+				}
+				this.processor.insertMysqlRawResults('duration', results);
+				fill_result_if_ready(this.processor);
+			});
+		}
+		break;
+	}
+	
+}
+
+Worker.prototype.gen_filter_data = function(callback){
+	//注册
+	this.processor.pushFilterToChain('account', 'source_type', 1560, compare_equal, 'mobile_uuid', 'account_uid');
+	//创角
+	this.processor.pushFilterToChain('account', 'source_type', 1562, compare_equal, 'account_uid', 'role_uid');
+	
+	switch(type){
+		//任务
+		//获取主线任务id序列 --保险起见应改为配置表读取
+		case 'task':{
+			con_log.query('SELECT task_id FROM `task_log` AS t5 RIGHT JOIN (SELECT COUNT(*) AS cola,t4.role_uid FROM (SELECT id,t3.role_uid,task_id FROM `task_log` AS t3 LEFT OUTER JOIN (SELECT role_uid FROM (SELECT role_uid,MIN(UNIX_TIMESTAMP(create_time)) as firsttime FROM `task_log` GROUP BY role_uid) as t1 WHERE t1.firsttime>=? AND t1.firsttime<?) AS t2 ON t2.role_uid=t3.role_uid WHERE task_type=1 AND op_type=702) AS t4 GROUP BY t4.role_uid ORDER BY cola DESC LIMIT 1) AS t6 ON t5.role_uid=t6.role_uid WHERE task_type=1 AND op_type=702 ORDER BY id;', [timestamp_tdby_begin, timestamp_yesterday_begin], function(error, results, fields){
+				//console.log(results);
+				for(idx in results){
+					var task_id = results[idx]['task_id'];
+					if(task_id == 0){
+						continue;
+					}
+					this.processor.pushFilterToChain('task', 'task_id', task_id, compare_equal, 'role_uid', 'role_uid');
+				}
+				if(callback !== undefined){
+					callback();
+				}
+			});
+		}
+		break;
+		case 'duration':{
+			var duration_cfg = [3 * 60, 10 * 60, 30 * 60, 60 * 60];
+			for(idx in duration_cfg){
+				var value = duration_cfg[idx];
+				this.processor.pushFilterToChain('duration', 'duration', value, compare_lessequal, 'role_uid', 'role_uid');
+			}
+			this.processor.pushFilterToChain('duration', 'duration', 60 * 60, compare_greater, 'role_uid', 'role_uid');
+			if(callback !== undefined){
+				callback();
+			}		
+		}
+		break;
+		case 'level':{
+			for(var i = 2; i <= 100; i++){
+				this.processor.pushFilterToChain('level', 'new_level', i, compare_equal, 'role_uid', 'role_uid');
+			}
+			if(callback !== undefined){
+				callback();
+			}		
+		}
+		break;
+	}
+}
 
 schedule.scheduleJob('0 0 4 * * *', function(){
 	var processor1 = new LayerDataProcessor();
@@ -330,8 +502,12 @@ schedule.scheduleJob('0 0 4 * * *', function(){
 });
 
 var processor1 = new LayerDataProcessor();
+var worker1 = new Worker(processor1);
 var processor2 = new LayerDataProcessor();
+var worker2 = new Worker(processor2);
 var processor3 = new LayerDataProcessor();
-start_work(processor1, 'level');
-start_work(processor2, 'duration');
-start_work(processor3, 'task');
+var worker3 = new Worker(processor3);
+
+worker1.start_work('level');
+worker2.start_work('duration');
+worker3.start_work('task');

@@ -8,7 +8,7 @@
             "type": "node",
             "request": "launch",
             "name": "statistics_gen",
-            "program": "${workspaceFolder}\\statistics_gen.js"
+            "program": "${workspaceFolder}/statistics_gen.js"
         }
     ]
 }
