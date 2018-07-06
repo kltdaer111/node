@@ -71,10 +71,13 @@ function Count(obj){
 
 var task_table = ['达成人数', '相对达成率', '绝对达成率', '离开人数', '次日留存', '留存率'];
 
-function Worker(){}
+function Worker(processor){
+	this.processor = processor;
+}
 
 Worker.prototype.start_work = function(type){
-	this.gen_filter_data(type, this.get_mysql_data_for_processor);
+	this.type = type;
+	this.gen_filter_data(this.get_mysql_data_for_processor);
 }
 
 Worker.prototype.getSecondDayRemainingByAccountid = function(account_array, second_day_start_timestamp, para1, callback){
@@ -230,7 +233,7 @@ Worker.prototype.get_mysql_data_for_processor = function(){
 	//取出指定日期的数据
 	this.processor.regNeedMysqlDataName('account');
 	this.processor.regNeedMysqlDataName('login');
-	this.processor.regNeedMysqlDataName(type);
+	this.processor.regNeedMysqlDataName(this.type);
 
 	con_glog.query('SELECT * FROM account_log WHERE UNIX_TIMESTAMP(create_date)=? AND (source_type=1562 OR source_type=1560);', [timestamp_tdby_begin],function(error, results, fields){
 		//console.log(results[0]);
@@ -247,7 +250,7 @@ Worker.prototype.get_mysql_data_for_processor = function(){
 		this.processor.insertMysqlRawResults('login', results);
 		this.fill_result_if_ready();
 	});
-	switch(type){
+	switch(this.type){
 		case 'task':{
 			con_log.query('SELECT * FROM task_log WHERE task_type=1 AND op_type=702 AND UNIX_TIMESTAMP(create_time)>=? AND UNIX_TIMESTAMP(create_time)<?;', [timestamp_tdby_begin, timestamp_yesterday_begin], function(error, results, fields){
 				//console.log(results[1]);
@@ -291,7 +294,7 @@ Worker.prototype.gen_filter_data = function(callback){
 	//创角
 	this.processor.pushFilterToChain('account', 'source_type', 1562, compare_equal, 'account_uid', 'role_uid');
 	
-	switch(type){
+	switch(this.type){
 		//任务
 		//获取主线任务id序列 --保险起见应改为配置表读取
 		case 'task':{
