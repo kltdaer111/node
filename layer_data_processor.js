@@ -1,8 +1,8 @@
 function LayerDataProcessor(){
-    
+    this.m_need_name = [];
+    this.m_mysql_raw_results = {};
+    this.m_chain = [];
 }
-
-LayerDataProcessor.prototype.m_need_name = [];
 
 LayerDataProcessor.prototype.regNeedMysqlDataName = function(name){
     this.m_need_name.push(name);
@@ -17,16 +17,12 @@ LayerDataProcessor.prototype.checkMysqlDataReady = function(){
     return true;
 }
 
-LayerDataProcessor.prototype.m_mysql_raw_results = {};
-
 LayerDataProcessor.prototype.insertMysqlRawResults = function(name, data){
     this.m_mysql_raw_results[name] = data;
 }
 
-LayerDataProcessor.prototype.m_chain = [];
-
-LayerDataProcessor.prototype.pushFilterToChain = function(mysql_raw_data_name, filter_col_name, filter_value, compare_func, input_col, output_col){
-    this.m_chain.push({col : filter_col_name, value : filter_value, src : mysql_raw_data_name, func : compare_func, input : input_col, output : output_col});
+LayerDataProcessor.prototype.pushFilterToChain = function(mysql_raw_data_name, filter_col_name, filter_value, compare_func, input_col, output_col, name){
+    this.m_chain.push({col : filter_col_name, value : filter_value, src : mysql_raw_data_name, func : compare_func, input : input_col, output : output_col, name : name});
 }
 
 LayerDataProcessor.prototype.__filter_mysql_raw_data = function(mysql_raw_data, filter_col, value, func){
@@ -62,13 +58,9 @@ LayerDataProcessor.prototype.getChainWorkResult = function(){
     for(idx in this.m_chain){
         var filter = this.m_chain[idx];
         var data = this.__gen_remaining(filter.input, data, filter.output, this.__filter_mysql_raw_data(this.m_mysql_raw_results[filter.src], filter.col, filter.value, filter.func));
-        result.push([filter.output, data]);
+        result.push([filter.output, data, filter.name]);
     }
     return result;
-}
-
-function LayerDataProcessorResult(){
-    
 }
 
 module.exports.LayerDataProcessor = LayerDataProcessor;
