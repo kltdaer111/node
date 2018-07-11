@@ -7,8 +7,8 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "statistics_gen",
-            "program": "${workspaceFolder}/statistics_gen.js"
+            "name": "run_timer",
+            "program": "${workspaceFolder}/run_timer.js"
         }
     ]
 }
