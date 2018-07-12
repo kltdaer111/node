@@ -12,3 +12,4 @@ GM_server_msg_handler.prototype.on_msg = function(id, msg){
 GM_server_msg_handler.prototype.reg_func= function(id, func){
     this.msg_func.set(id, func);
 }
+

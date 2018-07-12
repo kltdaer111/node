@@ -35,3 +35,5 @@ GMConnector.prototype.send = function(id, data){
     var msg = packer.Pack(id, data);
     this.socket.write(msg);
 }
+
+module.exports = GMConnector;
